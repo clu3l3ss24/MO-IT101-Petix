@@ -1,0 +1,15 @@
+com\mycompany\payslipmotorphms2\Main.class
+com\mycompany\payslipmotorphms2\model\AttendanceRecord.class
+com\mycompany\payslipmotorphms2\model\Employee.class
+com\mycompany\payslipmotorphms2\dao\CSVDataLoader.class
+com\mycompany\payslipmotorphms2\service\EmployeeServiceImpl.class
+com\mycompany\payslipmotorphms2\util\ConsoleHelper.class
+com\mycompany\payslipmotorphms2\service\TeamService.class
+com\mycompany\payslipmotorphms2\PayslipMotorPHMS2.class
+com\mycompany\payslipmotorphms2\service\AttendanceService.class
+com\mycompany\payslipmotorphms2\service\AttendanceServiceImpl.class
+com\mycompany\payslipmotorphms2\service\HRService.class
+com\mycompany\payslipmotorphms2\service\HRServiceImpl.class
+com\mycompany\payslipmotorphms2\service\TeamServiceImpl.class
+com\mycompany\payslipmotorphms2\model\Payslip.class
+com\mycompany\payslipmotorphms2\service\EmployeeService.class
