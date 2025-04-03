@@ -231,6 +231,12 @@ private int calculateTardiness(String logInTime) {
         double clothingAllowance = calculateAllowance(Double.parseDouble(employee.getClothingAllowance().replace(",", "")));
         double totalNonTaxableIncome = riceSubsidy + phoneAllowance + clothingAllowance;
 
+        // Add tardiness calculation in the payslip generation
+int tardinessMinutes = workHours.stream()
+    .filter(record -> record[0].trim().equals(employee.getId().trim()))
+    .mapToInt(record -> calculateTardiness(record[3].trim()))
+    .sum();
+        
         // Calculate Net Salary
         double netSalary = (totalTaxableIncome + totalNonTaxableIncome) - totalDeductions;
 
