@@ -1,48 +1,63 @@
 package com.mycompany.payslipmotorphms2.model;
 
-// Import necessary classes for date and time handling
 import java.time.LocalDateTime;
 import java.time.Duration;
 
-// Class representing an attendance record for an employee
 public class AttendanceRecord {
-    // Fields to store employee ID, time in, and time out
     private int employeeId;
     private LocalDateTime timeIn;
     private LocalDateTime timeOut;
 
-    // Constructor to initialize the fields
+    // Constructor
     public AttendanceRecord(int employeeId, LocalDateTime timeIn, LocalDateTime timeOut) {
         this.employeeId = employeeId;
         this.timeIn = timeIn;
         this.timeOut = timeOut;
     }
 
-    // Getter method to retrieve the employee ID
+    // Getters
     public int getEmployeeId() {
         return employeeId;
     }
 
-    // Getter method to retrieve the time in
     public LocalDateTime getTimeIn() {
         return timeIn;
     }
 
-    // Getter method to retrieve the time out
     public LocalDateTime getTimeOut() {
         return timeOut;
     }
 
-    // Method to calculate the total hours worked
+    // Method to calculate total hours worked with deduction rules
     public double getHoursWorked() {
-        // Check if both time in and time out are not null
         if (timeIn != null && timeOut != null) {
-            // Calculate the duration between time in and time out
+            // Define the scheduled login time (8:00 AM) and the allowed grace period (until 8:10 AM)
+            LocalDateTime scheduledTimeIn = timeIn.toLocalDate().atTime(8, 0);
+            LocalDateTime gracePeriodTime = timeIn.toLocalDate().atTime(8, 10);
+            LocalDateTime endOfDay = timeIn.toLocalDate().atTime(17, 0); // 5:00 PM
+
+            // Ensure timeOut is capped at 5:00 PM if after that
+            if (timeOut.isAfter(endOfDay)) {
+                timeOut = endOfDay;
+            }
+
+            // Calculate the duration worked without deduction
             Duration duration = Duration.between(timeIn, timeOut);
-            // Return the total hours worked as a decimal
-            return duration.toHours() + (duration.toMinutesPart() / 60.0);
+            double totalHours = duration.toHours() + (duration.toMinutesPart() / 60.0);
+
+            // If timeIn is after 8:10 AM, apply deduction
+            if (timeIn.isAfter(gracePeriodTime)) {
+                Duration lateDuration = Duration.between(gracePeriodTime, timeIn);
+                double lateMinutes = lateDuration.toMinutes(); // Calculate late minutes
+                double deduction = lateMinutes / 60.0; // Convert minutes to hours
+
+                // Subtract the deduction from the total hours worked
+                totalHours -= deduction;
+            }
+
+            // Round the total hours worked to 2 decimal places
+            return Math.round(totalHours * 100.0) / 100.0;
         }
-        // Return 0.0 if time in or time out is null
         return 0.0;
     }
 }
