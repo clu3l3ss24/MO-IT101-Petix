@@ -73,34 +73,63 @@ public class EmployeeServiceImpl implements EmployeeService {
 
     // Method to calculate total hours worked by an employee within a week
     private double calculateTotalHoursWorked(String employeeId, LocalDate startOfWeek, LocalDate endOfWeek) {
-        return workHours.stream()
-                .filter(record -> record[0].trim().equals(employeeId.trim())) // Match Employee ID
-                .filter(record -> {
-                    try {
-                        LocalDate logDate = LocalDate.parse(record[2].trim(), DateTimeFormatter.ofPattern("M/d/yyyy"));
-                        return !logDate.isBefore(startOfWeek) && !logDate.isAfter(endOfWeek); // Within range
-                    } catch (DateTimeParseException e) {
-                        return false; // Skip invalid dates
-                    }
-                })
-                .mapToDouble(record -> {
-                    try {
-                        String[] logInParts = record[3].trim().split(":");
-                        String[] logOutParts = record[4].trim().split(":");
-                        int logInHour = Integer.parseInt(logInParts[0]);
-                        int logInMinute = Integer.parseInt(logInParts[1]);
-                        int logOutHour = Integer.parseInt(logOutParts[0]);
-                        int logOutMinute = Integer.parseInt(logOutParts[1]);
+    return workHours.stream()
+            .filter(record -> record[0].trim().equals(employeeId.trim())) // Match Employee ID
+            .filter(record -> {
+                try {
+                    LocalDate logDate = LocalDate.parse(record[2].trim(), DateTimeFormatter.ofPattern("M/d/yyyy"));
+                    return !logDate.isBefore(startOfWeek) && !logDate.isAfter(endOfWeek); // Within range
+                } catch (DateTimeParseException e) {
+                    return false; // Skip invalid dates
+                }
+            })
+            .mapToDouble(record -> {
+                try {
+                    // Extract login and logout times
+                    String logInTime = record[3].trim();
+                    String logOutTime = record[4].trim();
+                    
+                    // Convert to LocalTime
+                    LocalTime logIn = LocalTime.parse(logInTime, DateTimeFormatter.ofPattern("h:mm a"));
+                    LocalTime logOut = LocalTime.parse(logOutTime, DateTimeFormatter.ofPattern("h:mm a"));
 
-                        int totalMinutes = (logOutHour * 60 + logOutMinute) - (logInHour * 60 + logInMinute);
-                        return totalMinutes / 60.0; // Convert minutes to hours
-                    } catch (Exception e) {
-                        return 0.0; // Skip invalid time entries
-                    }
-                })
-                .sum();
+                    // Calculate total worked minutes
+                    int totalMinutesWorked = (logOut.getHour() * 60 + logOut.getMinute()) - 
+                                             (logIn.getHour() * 60 + logIn.getMinute());
+
+                    // Deduct tardiness
+                    int tardinessMinutes = calculateTardiness(logInTime);
+                    totalMinutesWorked = Math.max(0, totalMinutesWorked - tardinessMinutes);
+
+                    return totalMinutesWorked / 60.0; // Convert minutes to hours
+                } catch (Exception e) {
+                    return 0.0; // Skip invalid time entries
+                }
+            })
+            .sum();
+}
+
+    // Method to calculate tardiness in minutes
+private int calculateTardiness(String logInTime) {
+    try {
+        // Define shift start time (8:00 AM) and grace period (8:10 AM)
+        LocalTime shiftStart = LocalTime.of(8, 0);
+        LocalTime gracePeriodEnd = LocalTime.of(8, 10);
+        
+        // Parse employee login time
+        LocalTime logIn = LocalTime.parse(logInTime.trim(), DateTimeFormatter.ofPattern("h:mm a"));
+        
+        // Check if the employee is late
+        if (logIn.isAfter(gracePeriodEnd)) {
+            return (int) Duration.between(shiftStart, logIn).toMinutes(); // Total minutes late from 8:00 AM
+        }
+    } catch (DateTimeParseException e) {
+        System.out.println("Invalid log-in time format: " + logInTime);
     }
+    return 0; // No tardiness if within grace period or invalid time
+}
 
+    
     // Method to calculate SSS contribution based on taxable income
     private double calculateSSSContribution(double totalTaxableIncome) {
         if (totalTaxableIncome < 3250) {
@@ -230,6 +259,7 @@ public class EmployeeServiceImpl implements EmployeeService {
                 "Pag-ibig             : %.2f\n" +
                 "Philhealth           : %.2f\n" +
                 "Withholding Tax      : %.2f\n" +
+                "Tardiness (minutes)    : %d\n" +
                 "Total Deductions     : %.2f\n" +
                 "------------------------------------------------------------\n" +
                 "-------------------- Non-Taxable Income --------------------\n" +
@@ -261,6 +291,7 @@ public class EmployeeServiceImpl implements EmployeeService {
                 pagibigContribution,
                 philhealthContribution,
                 withholdingTax,
+                tardinessMinutes,
                 totalDeductions,
                 riceSubsidy,
                 phoneAllowance,
