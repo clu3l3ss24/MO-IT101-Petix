@@ -94,41 +94,24 @@ public class EmployeeServiceImpl implements EmployeeService {
                     LocalTime logOut = LocalTime.parse(logOutTime, DateTimeFormatter.ofPattern("h:mm a"));
 
                     // Calculate total worked minutes
-                    int totalMinutesWorked = (logOut.getHour() * 60 + logOut.getMinute()) - 
-                                             (logIn.getHour() * 60 + logIn.getMinute());
-
-                    // Deduct tardiness
-                    int tardinessMinutes = calculateTardiness(logInTime);
-                    totalMinutesWorked = Math.max(0, totalMinutesWorked - tardinessMinutes);
-
-                    return totalMinutesWorked / 60.0; // Convert minutes to hours
-                } catch (Exception e) {
-                    return 0.0; // Skip invalid time entries
-                }
-            })
-            .sum();
-}
-
-    // Method to calculate tardiness in minutes
-private int calculateTardiness(String logInTime) {
-    try {
-        // Define shift start time (8:00 AM) and grace period (8:10 AM)
-        LocalTime shiftStart = LocalTime.of(8, 0);
-        LocalTime gracePeriodEnd = LocalTime.of(8, 10);
+                    private int calculateTardiness(String logInTime) {
+                    try {
+                    // Define shift start time (8:00 AM) and grace period (8:10 AM)
+                    LocalTime shiftStart = LocalTime.of(8, 0);
+                    LocalTime gracePeriodEnd = LocalTime.of(8, 10);
         
-        // Parse employee login time
-        LocalTime logIn = LocalTime.parse(logInTime.trim(), DateTimeFormatter.ofPattern("h:mm a"));
+                    // Parse employee login time
+                    LocalTime logIn = LocalTime.parse(logInTime.trim(), DateTimeFormatter.ofPattern("h:mm a"));
         
-        // Check if the employee is late
-        if (logIn.isAfter(gracePeriodEnd)) {
-            return (int) Duration.between(shiftStart, logIn).toMinutes(); // Total minutes late from 8:00 AM
-        }
-    } catch (DateTimeParseException e) {
-        System.out.println("Invalid log-in time format: " + logInTime);
-    }
-    return 0; // No tardiness if within grace period or invalid time
+                    // Check if the employee is late
+                    if (logIn.isAfter(gracePeriodEnd)) {
+                    return (int) Duration.between(shiftStart, logIn).toMinutes(); // Total minutes late from 8:00 AM
+                    }
+                    } catch (DateTimeParseException e) {
+                    System.out.println("Invalid log-in time format: " + logInTime);
+                    }
+                    return 0; // No tardiness if within grace period or invalid time
 }
-
     
     // Method to calculate SSS contribution based on taxable income
     private double calculateSSSContribution(double totalTaxableIncome) {
