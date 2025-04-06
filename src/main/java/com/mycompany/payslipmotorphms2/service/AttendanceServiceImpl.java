@@ -9,7 +9,6 @@ import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.List;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 // Implementation of the AttendanceService interface
@@ -41,6 +40,120 @@ public class AttendanceServiceImpl implements AttendanceService {
                 .collect(Collectors.toList());
     }
 
+    // Method to calculate total hours worked
+    @Override
+    public double calculateTotalHoursWorked(String employeeId, LocalDate startOfWeek, LocalDate endOfWeek) {
+        // Calculate late hours, undertime hours, and overtime hours
+        double lateHours = calculateLateHours(employeeId, startOfWeek, endOfWeek);
+        double undertimeHours = calculateUndertimeHours(employeeId, startOfWeek, endOfWeek);
+        double overtimeHours = calculateOvertimeHours(employeeId, startOfWeek, endOfWeek);
+
+        // Compute total hours worked based on the formula: 40 - late - undertime + overtime
+        double totalHoursWorked = 40 - lateHours - undertimeHours + overtimeHours;
+
+        // Ensure total hours worked is not negative
+        return Math.max(totalHoursWorked, 0);
+    }
+
+    // Method to calculate late hours
+    @Override
+    public double calculateLateHours(String employeeId, LocalDate startOfWeek, LocalDate endOfWeek) {
+        LocalTime shiftStartTime = LocalTime.of(8, 0); // 8:00 AM
+        LocalTime gracePeriodEnd = shiftStartTime.plusMinutes(10); // 8:10 AM
+
+        return workHours.stream()
+                .filter(record -> record[0].trim().equals(employeeId.trim()))
+                .filter(record -> {
+                    try {
+                        LocalDate logDate = LocalDate.parse(record[2].trim(), DateTimeFormatter.ofPattern("M/d/yyyy"));
+                        return !logDate.isBefore(startOfWeek) && !logDate.isAfter(endOfWeek);
+                    } catch (DateTimeParseException e) {
+                        return false; // Skip invalid dates
+                    }
+                })
+                .mapToDouble(record -> {
+                    try {
+                        String[] logInParts = record[3].trim().split(":");
+                        LocalTime logInTime = LocalTime.of(Integer.parseInt(logInParts[0]), Integer.parseInt(logInParts[1]));
+                        if (logInTime.isAfter(gracePeriodEnd)) {
+                            return (logInTime.toSecondOfDay() - shiftStartTime.toSecondOfDay()) / 3600.0; // Convert seconds to hours
+                        }
+                        return 0.0;
+                    } catch (Exception e) {
+                        return 0.0; // Skip invalid time entries
+                    }
+                })
+                .sum();
+    }
+
+    // Method to calculate undertime hours
+    @Override
+    public double calculateUndertimeHours(String employeeId, LocalDate startOfWeek, LocalDate endOfWeek) {
+        LocalTime shiftEndTime = LocalTime.of(17, 0); // 5:00 PM
+
+        return workHours.stream()
+                .filter(record -> record[0].trim().equals(employeeId.trim()))
+                .filter(record -> {
+                    try {
+                        LocalDate logDate = LocalDate.parse(record[2].trim(), DateTimeFormatter.ofPattern("M/d/yyyy"));
+                        return !logDate.isBefore(startOfWeek) && !logDate.isAfter(endOfWeek);
+                    } catch (DateTimeParseException e) {
+                        return false; // Skip invalid dates
+                    }
+                })
+                .mapToDouble(record -> {
+                    try {
+                        String[] logOutParts = record[4].trim().split(":");
+                        LocalTime logOutTime = LocalTime.of(Integer.parseInt(logOutParts[0]), Integer.parseInt(logOutParts[1]));
+                        if (logOutTime.isBefore(shiftEndTime)) {
+                            return (shiftEndTime.toSecondOfDay() - logOutTime.toSecondOfDay()) / 3600.0; // Convert seconds to hours
+                        }
+                        return 0.0;
+                    } catch (Exception e) {
+                        return 0.0; // Skip invalid time entries
+                    }
+                })
+                .sum();
+    }
+
+    // Method to calculate overtime hours
+    @Override
+    public double calculateOvertimeHours(String employeeId, LocalDate startOfWeek, LocalDate endOfWeek) {
+        LocalTime shiftStartTime = LocalTime.of(8, 0); // 8:00 AM
+        LocalTime shiftEndTime = LocalTime.of(17, 0); // 5:00 PM
+
+        return workHours.stream()
+                .filter(record -> record[0].trim().equals(employeeId.trim()))
+                .filter(record -> {
+                    try {
+                        LocalDate logDate = LocalDate.parse(record[2].trim(), DateTimeFormatter.ofPattern("M/d/yyyy"));
+                        return !logDate.isBefore(startOfWeek) && !logDate.isAfter(endOfWeek);
+                    } catch (DateTimeParseException e) {
+                        return false; // Skip invalid dates
+                    }
+                })
+                .mapToDouble(record -> {
+                    try {
+                        String[] logInParts = record[3].trim().split(":");
+                        String[] logOutParts = record[4].trim().split(":");
+                        LocalTime logInTime = LocalTime.of(Integer.parseInt(logInParts[0]), Integer.parseInt(logInParts[1]));
+                        LocalTime logOutTime = LocalTime.of(Integer.parseInt(logOutParts[0]), Integer.parseInt(logOutParts[1]));
+
+                        double overtime = 0.0;
+                        if (logInTime.isBefore(shiftStartTime)) {
+                            overtime += (shiftStartTime.toSecondOfDay() - logInTime.toSecondOfDay()) / 3600.0; // Before shift start
+                        }
+                        if (logOutTime.isAfter(shiftEndTime)) {
+                            overtime += (logOutTime.toSecondOfDay() - shiftEndTime.toSecondOfDay()) / 3600.0; // After shift end
+                        }
+                        return overtime;
+                    } catch (Exception e) {
+                        return 0.0; // Skip invalid time entries
+                    }
+                })
+                .sum();
+    }
+
     // Method to generate an individual attendance report
     @Override
     public String generateIndividualAttendanceReport(String employeeId, LocalDate date) {
@@ -53,53 +166,11 @@ public class AttendanceServiceImpl implements AttendanceService {
         LocalDate startOfWeek = date.with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.SUNDAY));
         LocalDate endOfWeek = startOfWeek.plusDays(6);
 
-        // Initialize variables to store total hours, late, undertime, and overtime
-        double totalHoursWorked = 0.0;
-        double totalLate = 0.0;
-        double totalUndertime = 0.0;
-        double totalOvertime = 0.0;
-
-        // Loop through work hours to calculate total hours, late, undertime, and overtime
-        for (String[] record : workHours) {
-            if (!record[0].trim().equals(employeeId.trim())) {
-                continue;
-            }
-
-            try {
-                LocalDate logDate = LocalDate.parse(record[2].trim(), DateTimeFormatter.ofPattern("M/d/yyyy"));
-                if (logDate.isBefore(startOfWeek) || logDate.isAfter(endOfWeek)) {
-                    continue;
-                }
-
-                String[] logInParts = record[3].trim().split(":");
-                String[] logOutParts = record[4].trim().split(":");
-                LocalTime logInTime = LocalTime.of(Integer.parseInt(logInParts[0]), Integer.parseInt(logInParts[1]));
-                LocalTime logOutTime = LocalTime.of(Integer.parseInt(logOutParts[0]), Integer.parseInt(logOutParts[1]));
-
-                // Calculate hours worked
-                double hoursWorked = (logOutTime.toSecondOfDay() - logInTime.toSecondOfDay()) / 3600.0;
-                totalHoursWorked += hoursWorked;
-
-                // Calculate late, undertime, and overtime
-                if (logInTime.isAfter(LocalTime.of(9, 0))) {
-                    totalLate += (logInTime.toSecondOfDay() - LocalTime.of(9, 0).toSecondOfDay()) / 3600.0;
-                }
-                if (logOutTime.isBefore(LocalTime.of(18, 0))) {
-                    totalUndertime += (LocalTime.of(18, 0).toSecondOfDay() - logOutTime.toSecondOfDay()) / 3600.0;
-                }
-                if (logInTime.isBefore(LocalTime.of(9, 0))) {
-                    totalOvertime += (LocalTime.of(9, 0).toSecondOfDay() - logInTime.toSecondOfDay()) / 3600.0;
-                }
-                if (logOutTime.isAfter(LocalTime.of(18, 0))) {
-                    totalOvertime += (logOutTime.toSecondOfDay() - LocalTime.of(18, 0).toSecondOfDay()) / 3600.0;
-                }
-
-            } catch (DateTimeParseException e) {
-                // Skip invalid dates
-            } catch (Exception e) {
-                // Skip invalid time entries
-            }
-        }
+        // Calculate attendance details
+        double totalHoursWorked = calculateTotalHoursWorked(employeeId, startOfWeek, endOfWeek);
+        double totalLate = calculateLateHours(employeeId, startOfWeek, endOfWeek);
+        double totalUndertime = calculateUndertimeHours(employeeId, startOfWeek, endOfWeek);
+        double totalOvertime = calculateOvertimeHours(employeeId, startOfWeek, endOfWeek);
 
         // Format and return the attendance report
         return String.format(
@@ -131,13 +202,7 @@ public class AttendanceServiceImpl implements AttendanceService {
             return "Supervisor not found.";
         }
 
-        Optional<String> supervisorNameOpt = dataLoader.getSupervisorNameById(supervisorId);
-        if (!supervisorNameOpt.isPresent()) {
-            return "Supervisor name not found.";
-        }
-
-        String supervisorName = supervisorNameOpt.get();
-        List<Employee> teamMembers = findEmployeesBySupervisor(supervisorName);
+        List<Employee> teamMembers = findEmployeesBySupervisor(supervisor.getName());
         if (teamMembers.isEmpty()) {
             return "No team members found for the supervisor.";
         }
@@ -150,56 +215,15 @@ public class AttendanceServiceImpl implements AttendanceService {
         StringBuilder report = new StringBuilder();
         report.append(String.format("==================== Team Attendance Report ====================\n"));
         report.append(String.format("Supervisor ID : %s\n", supervisor.getId()));
-        report.append(String.format("Supervisor Name: %s\n", supervisorName));
+        report.append(String.format("Supervisor Name: %s\n", supervisor.getName()));
         report.append(String.format("Period        : %s to %s\n\n", startOfWeek, endOfWeek));
 
         // Loop through team members to generate individual attendance details
         for (Employee member : teamMembers) {
-            double totalHoursWorked = 0.0;
-            double totalLate = 0.0;
-            double totalUndertime = 0.0;
-            double totalOvertime = 0.0;
-
-            for (String[] record : workHours) {
-                if (!record[0].trim().equals(member.getId().trim())) {
-                    continue;
-                }
-
-                try {
-                    LocalDate logDate = LocalDate.parse(record[2].trim(), DateTimeFormatter.ofPattern("M/d/yyyy"));
-                    if (logDate.isBefore(startOfWeek) || logDate.isAfter(endOfWeek)) {
-                        continue;
-                    }
-
-                    String[] logInParts = record[3].trim().split(":");
-                    String[] logOutParts = record[4].trim().split(":");
-                    LocalTime logInTime = LocalTime.of(Integer.parseInt(logInParts[0]), Integer.parseInt(logInParts[1]));
-                    LocalTime logOutTime = LocalTime.of(Integer.parseInt(logOutParts[0]), Integer.parseInt(logOutParts[1]));
-
-                    // Calculate hours worked
-                    double hoursWorked = (logOutTime.toSecondOfDay() - logInTime.toSecondOfDay()) / 3600.0;
-                    totalHoursWorked += hoursWorked;
-
-                    // Calculate late, undertime, and overtime
-                    if (logInTime.isAfter(LocalTime.of(9, 0))) {
-                        totalLate += (logInTime.toSecondOfDay() - LocalTime.of(9, 0).toSecondOfDay()) / 3600.0;
-                    }
-                    if (logOutTime.isBefore(LocalTime.of(18, 0))) {
-                        totalUndertime += (LocalTime.of(18, 0).toSecondOfDay() - logOutTime.toSecondOfDay()) / 3600.0;
-                    }
-                    if (logInTime.isBefore(LocalTime.of(9, 0))) {
-                        totalOvertime += (LocalTime.of(9, 0).toSecondOfDay() - logInTime.toSecondOfDay()) / 3600.0;
-                    }
-                    if (logOutTime.isAfter(LocalTime.of(18, 0))) {
-                        totalOvertime += (logOutTime.toSecondOfDay() - LocalTime.of(18, 0).toSecondOfDay()) / 3600.0;
-                    }
-
-                } catch (DateTimeParseException e) {
-                    // Skip invalid dates
-                                } catch (Exception e) {
-                    // Skip invalid time entries
-                }
-            }
+            double totalHoursWorked = calculateTotalHoursWorked(member.getId(), startOfWeek, endOfWeek);
+            double totalLate = calculateLateHours(member.getId(), startOfWeek, endOfWeek);
+            double totalUndertime = calculateUndertimeHours(member.getId(), startOfWeek, endOfWeek);
+            double totalOvertime = calculateOvertimeHours(member.getId(), startOfWeek, endOfWeek);
 
             // Append individual member's attendance details to the report
             report.append(String.format(

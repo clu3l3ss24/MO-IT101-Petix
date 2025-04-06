@@ -10,16 +10,18 @@ import java.util.List;
 
 // Implementation of the EmployeeService interface
 public class EmployeeServiceImpl implements EmployeeService {
-    // Fields to store employee data, work hours, and SSS contributions
+    // Fields to store employee data, work hours, SSS contributions, and attendance service
     private final List<Employee> employees;
     private final List<String[]> workHours;
     private final List<String[]> sssContributions;
+    private final AttendanceService attendanceService;
 
     // Constructor to initialize the fields
-    public EmployeeServiceImpl(List<Employee> employees, List<String[]> workHours, List<String[]> sssContributions) {
+    public EmployeeServiceImpl(List<Employee> employees, List<String[]> workHours, List<String[]> sssContributions, AttendanceService attendanceService) {
         this.employees = employees;
         this.workHours = workHours;
         this.sssContributions = sssContributions;
+        this.attendanceService = attendanceService;
     }
 
     // Method to find an employee by their ID
@@ -66,39 +68,129 @@ public class EmployeeServiceImpl implements EmployeeService {
         );
     }
 
+    // Method to generate a payslip for an employee
+    @Override
+    public String generatePayslip(Employee employee, LocalDate date) {
+        LocalDate startOfWeek = date.with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.SUNDAY));
+        LocalDate endOfWeek = startOfWeek.plusDays(6);
+
+        // Calculate basic salary
+        double basicSalary = 0.0;
+        try {
+            basicSalary = calculateWeeklyBasicSalary(Double.parseDouble(employee.getBasicSalary().replace(",", "")));
+        } catch (NumberFormatException e) {
+            System.out.println("Invalid Basic Salary format for Employee ID: " + employee.getId());
+        }
+
+        // Retrieve attendance details
+        double hoursWorked = attendanceService.calculateTotalHoursWorked(employee.getId(), startOfWeek, endOfWeek);
+        double lateHours = attendanceService.calculateLateHours(employee.getId(), startOfWeek, endOfWeek);
+        double undertimeHours = attendanceService.calculateUndertimeHours(employee.getId(), startOfWeek, endOfWeek);
+        double overtimeHours = attendanceService.calculateOvertimeHours(employee.getId(), startOfWeek, endOfWeek);
+
+        // Calculate total taxable income
+        double totalTaxableIncome = 0.0;
+        try {
+            double hourlyRate = Double.parseDouble(employee.getHourlyRate().replace(",", ""));
+            totalTaxableIncome = hoursWorked * hourlyRate;
+        } catch (NumberFormatException e) {
+            System.out.println("Invalid Hourly Rate format for Employee ID: " + employee.getId());
+        }
+
+        // Calculate deductions
+        double sssContribution = calculateSSSContribution(totalTaxableIncome);
+        double pagibigContribution = calculatePagibigContribution(basicSalary);
+        double philhealthContribution = calculatePhilhealthContribution(basicSalary);
+        double taxableIncomeAfterDeductions = totalTaxableIncome - (sssContribution + pagibigContribution + philhealthContribution);
+        double withholdingTax = calculateWithholdingTax(taxableIncomeAfterDeductions);
+        double totalDeductions = sssContribution + pagibigContribution + philhealthContribution + withholdingTax;
+
+        // Calculate non-taxable income
+        double riceSubsidy = calculateAllowance(Double.parseDouble(employee.getRiceSubsidy().replace(",", "")));
+        double phoneAllowance = calculateAllowance(Double.parseDouble(employee.getPhoneAllowance().replace(",", "")));
+        double clothingAllowance = calculateAllowance(Double.parseDouble(employee.getClothingAllowance().replace(",", "")));
+        double totalNonTaxableIncome = riceSubsidy + phoneAllowance + clothingAllowance;
+
+        // Calculate net salary
+        double netSalary = (totalTaxableIncome + totalNonTaxableIncome) - totalDeductions;
+
+        // Format and return the payslip
+        return String.format(
+                "\n==================== MOTORPH | Payslip =====================\n" +
+                "Period: %s to %s\n" +
+                "------------------------------------------------------------\n" +
+                "Employee ID          : %s\n" +
+                "Employee Name        : %s\n" +
+                "Position             : %s\n" +
+                "Status               : %s\n" +
+                "Immediate Supervisor : %s\n" +
+                "Phone Number         : %s\n" +
+                "SSS Number           : %s\n" +
+                "Philhealth Number    : %s\n" +
+                "TIN Number           : %s\n" +
+                "Pag-ibig Number      : %s\n\n" +
+                "-------------------- Taxable Earnings ----------------------\n" +
+                "Basic Salary         : %.2f\n" +
+                "Hours Worked         : %.2f\n" +
+                "Late Hours           : %.2f\n" +
+                "Undertime Hours      : %.2f\n" +
+                "Overtime Hours       : %.2f\n" +
+                "Total Taxable Income : %.2f\n" +
+                "------------------------------------------------------------\n" +
+                "---------------------- Deductions --------------------------\n" +
+                "SSS                  : %.2f\n" +
+                "Pag-ibig             : %.2f\n" +
+                "Philhealth           : %.2f\n" +
+                "Withholding Tax      : %.2f\n" +
+                "Total Deductions     : %.2f\n" +
+                "------------------------------------------------------------\n" +
+                "-------------------- Non-Taxable Income --------------------\n" +
+                "Rice Subsidy         : %.2f\n" +
+                "Phone Allowance      : %.2f\n" +
+                "Clothing Allowance   : %.2f\n" +
+                "Total Non-Taxable Income: %.2f\n" +
+                "------------------------------------------------------------\n" +
+                "------------------------ Net Salary ------------------------\n" +
+                "Total Taxable Income : %.2f\n" +
+                "Total Non-Taxable Income: %.2f\n" +
+                "Total Deductions     : %.2f\n" +
+                "Net Salary           : %.2f\n",
+                startOfWeek, endOfWeek,
+                employee.getId(),
+                employee.getName(),
+                employee.getPosition(),
+                employee.getStatus(),
+                employee.getSupervisor(),
+                employee.getPhoneNumber(),
+                employee.getSssNumber(),
+                employee.getPhilhealthNumber(),
+                employee.getTinNumber(),
+                employee.getPagIbigNumber(),
+                basicSalary,
+                hoursWorked,
+                lateHours,
+                undertimeHours,
+                overtimeHours,
+                totalTaxableIncome,
+                sssContribution,
+                pagibigContribution,
+                philhealthContribution,
+                withholdingTax,
+                totalDeductions,
+                riceSubsidy,
+                phoneAllowance,
+                clothingAllowance,
+                totalNonTaxableIncome,
+                totalTaxableIncome,
+                totalNonTaxableIncome,
+                totalDeductions,
+                netSalary
+        );
+    }
+
     // Method to calculate weekly basic salary from monthly salary
     private double calculateWeeklyBasicSalary(double monthlySalary) {
         return monthlySalary / 4.0; // Calculate one week's worth of salary
-    }
-
-    // Method to calculate total hours worked by an employee within a week
-    private double calculateTotalHoursWorked(String employeeId, LocalDate startOfWeek, LocalDate endOfWeek) {
-        return workHours.stream()
-                .filter(record -> record[0].trim().equals(employeeId.trim())) // Match Employee ID
-                .filter(record -> {
-                    try {
-                        LocalDate logDate = LocalDate.parse(record[2].trim(), DateTimeFormatter.ofPattern("M/d/yyyy"));
-                        return !logDate.isBefore(startOfWeek) && !logDate.isAfter(endOfWeek); // Within range
-                    } catch (DateTimeParseException e) {
-                        return false; // Skip invalid dates
-                    }
-                })
-                .mapToDouble(record -> {
-                    try {
-                        String[] logInParts = record[3].trim().split(":");
-                        String[] logOutParts = record[4].trim().split(":");
-                        int logInHour = Integer.parseInt(logInParts[0]);
-                        int logInMinute = Integer.parseInt(logInParts[1]);
-                        int logOutHour = Integer.parseInt(logOutParts[0]);
-                        int logOutMinute = Integer.parseInt(logOutParts[1]);
-
-                        int totalMinutes = (logOutHour * 60 + logOutMinute) - (logInHour * 60 + logInMinute);
-                        return totalMinutes / 60.0; // Convert minutes to hours
-                    } catch (Exception e) {
-                        return 0.0; // Skip invalid time entries
-                    }
-                })
-                .sum();
     }
 
     // Method to calculate SSS contribution based on taxable income
@@ -162,114 +254,5 @@ public class EmployeeServiceImpl implements EmployeeService {
     // Method to calculate weekly allowance from monthly allowance
     private double calculateAllowance(double monthlyAllowance) {
         return monthlyAllowance / 4.0; // Calculate one week's worth of allowance
-    }
-
-    // Method to generate a payslip for an employee
-    @Override
-    public String generatePayslip(Employee employee, LocalDate date) {
-        LocalDate startOfWeek = date.with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.SUNDAY));
-        LocalDate endOfWeek = startOfWeek.plusDays(6);
-
-        double basicSalary = 0.0;
-        try {
-            basicSalary = calculateWeeklyBasicSalary(Double.parseDouble(employee.getBasicSalary().replace(",", "")));
-        } catch (NumberFormatException e) {
-            System.out.println("Invalid Basic Salary format for Employee ID: " + employee.getId());
-        }
-
-        double hoursWorked = calculateTotalHoursWorked(employee.getId(), startOfWeek, endOfWeek);
-
-        double totalTaxableIncome = 0.0;
-        try {
-            double hourlyRate = Double.parseDouble(employee.getHourlyRate().replace(",", ""));
-            totalTaxableIncome = hoursWorked * hourlyRate;
-        } catch (NumberFormatException e) {
-            System.out.println("Invalid Hourly Rate format for Employee ID: " + employee.getId());
-        }
-
-        double sssContribution = calculateSSSContribution(totalTaxableIncome);
-        double pagibigContribution = calculatePagibigContribution(basicSalary);
-        double philhealthContribution = calculatePhilhealthContribution(basicSalary);
-
-        double taxableIncomeAfterDeductions = totalTaxableIncome - (sssContribution + pagibigContribution + philhealthContribution);
-        double withholdingTax = calculateWithholdingTax(taxableIncomeAfterDeductions);
-
-        double totalDeductions = sssContribution + pagibigContribution + philhealthContribution + withholdingTax;
-
-        // Calculate Non-Taxable Income
-        double riceSubsidy = calculateAllowance(Double.parseDouble(employee.getRiceSubsidy().replace(",", "")));
-        double phoneAllowance = calculateAllowance(Double.parseDouble(employee.getPhoneAllowance().replace(",", "")));
-        double clothingAllowance = calculateAllowance(Double.parseDouble(employee.getClothingAllowance().replace(",", "")));
-        double totalNonTaxableIncome = riceSubsidy + phoneAllowance + clothingAllowance;
-
-        // Calculate Net Salary
-        double netSalary = (totalTaxableIncome + totalNonTaxableIncome) - totalDeductions;
-
-        // Format and return the payslip
-                return String.format(
-                "\n==================== MOTORPH | Payslip =====================\n" +
-                "Period: %s to %s\n" +
-                "------------------------------------------------------------\n" +
-                "Employee ID          : %s\n" +
-                "Employee Name        : %s\n" +
-                "Position             : %s\n" +
-                "Status               : %s\n" +
-                "Immediate Supervisor : %s\n" +
-                "Phone Number         : %s\n" +
-                "SSS Number           : %s\n" +
-                "Philhealth Number    : %s\n" +
-                "TIN Number           : %s\n" +
-                "Pag-ibig Number      : %s\n\n" +
-                "-------------------- Taxable Earnings ----------------------\n" +
-                "Basic Salary         : %.2f\n" +
-                "Hours Worked         : %.2f\n" +
-                "Total Taxable Income : %.2f\n" +
-                "------------------------------------------------------------\n" +
-                "---------------------- Deductions --------------------------\n" +
-                "SSS                  : %.2f\n" +
-                "Pag-ibig             : %.2f\n" +
-                "Philhealth           : %.2f\n" +
-                "Withholding Tax      : %.2f\n" +
-                "Total Deductions     : %.2f\n" +
-                "------------------------------------------------------------\n" +
-                "-------------------- Non-Taxable Income --------------------\n" +
-                "Rice Subsidy         : %.2f\n" +
-                "Phone Allowance      : %.2f\n" +
-                "Clothing Allowance   : %.2f\n" +
-                "Total Non-Taxable Income: %.2f\n" +
-                "------------------------------------------------------------\n" +
-                "------------------------ Net Salary ------------------------\n" +
-                "Total Taxable Income : %.2f\n" +
-                "Total Non-Taxable Income: %.2f\n" +
-                "Total Deductions     : %.2f\n" +
-                "Net Salary           : %.2f\n",
-                startOfWeek, endOfWeek,
-                employee.getId(),
-                employee.getName(),
-                employee.getPosition(),
-                employee.getStatus(),
-                employee.getSupervisor(),
-                employee.getPhoneNumber(),
-                employee.getSssNumber(),
-                employee.getPhilhealthNumber(),
-                employee.getTinNumber(),
-                employee.getPagIbigNumber(),
-                basicSalary,
-                hoursWorked,
-                totalTaxableIncome,
-                sssContribution,
-                pagibigContribution,
-                philhealthContribution,
-                withholdingTax,
-                totalDeductions,
-                riceSubsidy,
-                phoneAllowance,
-                clothingAllowance,
-                totalNonTaxableIncome,
-                totalTaxableIncome,
-                totalNonTaxableIncome,
-                totalDeductions,
-                netSalary
-        );
     }
 }
